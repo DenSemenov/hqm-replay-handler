@@ -238,11 +238,13 @@ namespace hqm_replay_handler
                     {
                         var replayTick = new ReplayTick
                         {
+                            
                             PacketNumber = packet,
                             RedScore = (int)red_score,
                             BlueScore = (int)blue_score,
                             Period = (int)period,
                             Time = (int)time,
+                            GoalMessageTimer = goal_message_timer,
                             Pucks = pucks,
                             Players = players,
                             PlayersInList = playersInList,

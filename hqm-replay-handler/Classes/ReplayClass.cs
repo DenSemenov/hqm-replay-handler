@@ -26,6 +26,8 @@ namespace ReplayHandler.Classes
         //public int GoalMessageTimer { get; set; }
         [JsonProperty("p")]
         public int Period { get; set; }
+        [JsonProperty("gmt")]
+        public uint GoalMessageTimer { get; set; }
         [JsonProperty("pc")]
         public List<ReplayPuck> Pucks { get; set; }
         [JsonProperty("pl")]
