@@ -1,7 +1,10 @@
-﻿using hqm_replay_handler;
+﻿using hqm_ranked_backend.Helpers;
+using hqm_replay_handler;
 
-var filePath = "D:\\replay.hrp";
+var filePath = "D:\\test.hrp";
 var data = File.ReadAllBytes(filePath);
-var result = ReplayHandler.ParseReplay(data);
+var result = Replay.ParseReplay(data);
+
+var processedData = ReplayDataHelper.GetReplayCalcData(result);
 
 Console.WriteLine();

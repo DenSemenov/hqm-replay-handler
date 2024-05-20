@@ -1,12 +1,13 @@
-﻿using hqm_replay_handler.Classes;
-using hqm_replay_handler.Helpers;
+﻿using ReplayHandler.Classes;
 
 namespace hqm_replay_handler
 {
-    public static class ReplayHandler
+    public static class Replay
     {
-        public static List<HQMGameState> ParseReplay(byte[] data)
+        public static List<ReplayTick> ParseReplay(byte[] data)
         {
+            var replayTicks = new List<ReplayTick>();
+
             var data_len = data.Length;
             var reader = new HQMMessageReader(data);
             reader.ReadU32Aligned();
@@ -14,7 +15,6 @@ namespace hqm_replay_handler
 
             var old_saved_packets = new Dictionary<uint, object>();
 
-            var history = new List<HQMGameState>();
             var current_player_list = new List<HQMServerPlayer?>();
             for (int i = 0; i < 63; i++)
             {
@@ -23,7 +23,10 @@ namespace hqm_replay_handler
 
             uint current_msg_pos = 0;
 
-            var index = 0;
+            var j = 0;
+            uint packet = 0;
+
+            var prevMessagesPacket = new List<HQMMessage>();
 
             while (reader.pos < data_len)
             {
@@ -60,6 +63,7 @@ namespace hqm_replay_handler
                                     {
                                         current_player_list[(int)player_index] = new HQMServerPlayer
                                         {
+
                                             name = player_name,
                                             team_and_skater = objectItem,
                                             index = player_index
@@ -73,6 +77,22 @@ namespace hqm_replay_handler
                                 }
                             case HQMMessageType.Goal:
                                 {
+                                    var player_index = msg.goal_player_index;
+
+                                    string name = null;
+                                    if (player_index.HasValue)
+                                    {
+                                        if (player_index.Value != -1)
+                                        {
+                                            try
+                                            {
+                                                var p = current_player_list[player_index.Value];
+                                                name = p?.name;
+                                                msg.player_name = name;
+                                            }
+                                            catch { }
+                                        }
+                                    }
                                     break;
                                 }
                             case HQMMessageType.Chat:
@@ -87,6 +107,7 @@ namespace hqm_replay_handler
                                         {
                                             var p = current_player_list[player_index.Value];
                                             name = p?.name;
+                                            msg.player_name = name;
                                         }
                                     }
 
@@ -99,29 +120,149 @@ namespace hqm_replay_handler
                 }
                 current_msg_pos = msg_pos + message_num;
 
-                var state = new HQMGameState
-                {
-                    packet_number = packet_number,
-                    red_score = red_score,
-                    blue_score = blue_score,
-                    period = period,
-                    game_over = game_over,
-                    time = time,
-                    goal_message_timer = goal_message_timer,
-                    objects = objects,
-                    player_list = current_player_list.ToList(),
-                    messages_in_this_packet = messages_in_this_packet
-                };
-
                 reader.Next();
 
-                history.Add(state);
+                if (j % 2 == 0)
+                {
+                    var pucks = new List<ReplayPuck>();
+                    var players = new List<ReplayPlayer>();
+                    var playersInList = new List<PlayerInList>();
 
-                index += 1;
+                    foreach (var player in current_player_list.Where(x => x != null).Where(x => x != null))
+                    {
+                        if (player.team_and_skater != null)
+                        {
+                            var index = (int)player.team_and_skater.Item1;
+                            var team = player.team_and_skater.Item2 == HQMTeam.Red ? ReplayTeam.Red : ReplayTeam.Blue;
+                            playersInList.Add(new PlayerInList
+                            {
+                                ListIndex = player.index,
+                                Name = player.name,
+                                Index = index,
+                                Team = team,
+                            });
+                        }
+                    }
+
+                    foreach (HQMObject obj in objects)
+                    {
+                        if (obj is HQMSkater)
+                        {
+                            var pl = obj as HQMSkater;
+
+                            players.Add(new ReplayPlayer
+                            {
+                                Index = pl.index,
+                                PosX = pl.pos_x,
+                                PosY = pl.pos_y,
+                                PosZ = pl.pos_z,
+                                RotX = pl.rot_x,
+                                RotY = pl.rot_y,
+                                RotZ = pl.rot_z,
+                                StickPosX = pl.stick_pos_x,
+                                StickPosY = pl.stick_pos_y,
+                                StickPosZ = pl.stick_pos_z,
+                                StickRotX = pl.stick_rot_x,
+                                StickRotY = pl.stick_rot_y,
+                                StickRotZ = pl.stick_rot_z,
+                                HeadTurn = pl.body_turn,
+                                BodyLean = pl.body_lean
+                            });
+
+
+                        }
+                        else
+                        {
+                            var puck = obj as HQMPuck;
+                            pucks.Add(new ReplayPuck
+                            {
+                                Index = puck.index,
+                                PosX = puck.pos_x,
+                                PosY = puck.pos_y,
+                                PosZ = puck.pos_z,
+                                RotX = puck.rot_x,
+                                RotY = puck.rot_y,
+                                RotZ = puck.rot_z,
+                            });
+                        }
+                    }
+
+                    var messages = messages_in_this_packet;
+                    messages.AddRange(prevMessagesPacket);
+
+                    var replayMessages = new List<ReplayMessage>();
+
+                    foreach (var message in messages)
+                    {
+                        var type = ReplayMessageType.PlayerUpdate;
+                        switch (message.type)
+                        {
+                            case HQMMessageType.PlayerUpdate:
+                                type = ReplayMessageType.PlayerUpdate;
+                                break;
+                            case HQMMessageType.Chat:
+                                type = ReplayMessageType.Chat;
+                                break;
+                            case HQMMessageType.Goal:
+                                type = ReplayMessageType.Goal;
+                                break;
+                        }
+
+                        var team = ReplayTeam.Spectator;
+                        switch (message.team)
+                        {
+                            case HQMTeam.Red:
+                                team = ReplayTeam.Red;
+                                break;
+                            case HQMTeam.Blue:
+                                team = ReplayTeam.Blue;
+                                break;
+                        }
+
+                        replayMessages.Add(new ReplayMessage
+                        {
+                            Message = message.message,
+                            AssistIndex = message.assist_player_index,
+                            GoalIndex = message.goal_player_index,
+                            InServer = message.in_server,
+                            ObjectIndex = message.objectItem?.Item1,
+                            Team = team,
+                            PlayerIndex = message.player_index,
+                            PlayerName = message.player_name,
+                            ReplayMessageType = type,
+                            UpdatePlayerIndex = message.player_index
+                        });
+                    }
+
+                    if (players.Count != 0)
+                    {
+                        var replayTick = new ReplayTick
+                        {
+                            PacketNumber = packet,
+                            RedScore = (int)red_score,
+                            BlueScore = (int)blue_score,
+                            Period = (int)period,
+                            Time = (int)time,
+                            Pucks = pucks,
+                            Players = players,
+                            PlayersInList = playersInList,
+                            Messages = replayMessages
+                        };
+
+                        replayTicks.Add(replayTick);
+
+                        packet += 1;
+                    }
+                }
+                else
+                {
+                    prevMessagesPacket = messages_in_this_packet;
+                }
+
+                j += 1;
             }
 
-
-            return history;
+            return replayTicks;
         }
 
         public static HQMMessage ReadMessage(ref HQMMessageReader reader)
@@ -220,7 +361,7 @@ namespace hqm_replay_handler
             }
         }
 
-        public static (List<dynamic>, uint) read_objects(ref HQMMessageReader reader, ref Dictionary<uint, object> history)
+        public static (List<HQMObject>, uint) read_objects(ref HQMMessageReader reader, ref Dictionary<uint, object> history)
         {
             uint current_packet_num = reader.ReadU32Aligned();
             uint previous_packet_num = reader.ReadU32Aligned();
@@ -285,8 +426,7 @@ namespace hqm_replay_handler
                 }
                 packets.Add(packet);
             }
-            bool first = true;
-            List<dynamic> objects = new List<dynamic>();
+            var objects = new List<HQMObject>();
             int index = 0;
             foreach (var packet in packets)
             {

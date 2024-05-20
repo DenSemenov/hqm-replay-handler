@@ -1,12 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace hqm_replay_handler.Helpers
+﻿namespace ReplayHandler.Classes
 {
-    public class HQMMessageReader
+    public struct HQMMessageReader
     {
         public byte[] buf;
         public int pos;
